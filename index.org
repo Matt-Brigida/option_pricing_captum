@@ -1,6 +1,7 @@
 #+title: Feature Importance in Option Pricing with Captum
 #+author: Matt Brigida
-#+setupfile: ~/.emacs.d/org-themes/src/darksun/darksun.theme
+#+PROPERTY: header-args  :eval no
+#+setupfile: ~/.emacs.d/org-themes/src/readtheorg_inline/readtheorg_inline.theme
 
 #+begin_comment
 darksun theme
@@ -13,7 +14,7 @@ Can access all themes in .emacs/org-themes
 
 * Imports
 
-#+begin_src python :session py
+#+begin_src python :session py :exports none
 import pandas as pd
 import torch
 from torch.nn.functional import normalize
@@ -44,7 +45,7 @@ device = "cuda:0"
 
 Import data from Monte Carlo simulations:
 
-#+begin_src python :session py
+#+begin_src python :session py :exports results
 data1 = pd.read_pickle("./td1.pkl")
 data2 = pd.read_pickle("./td2.pkl")
 data3 = pd.read_pickle("./td3.pkl")
@@ -82,7 +83,7 @@ data
 Here we define the model and import trained weights.
 
 
-#+begin_src python :session py
+#+begin_src python :session py :exports both
 model = nn.Sequential(
     nn.Linear(10, 400),
     nn.ReLU(),
@@ -96,16 +97,13 @@ model = nn.Sequential(
     nn.ReLU(),
     nn.Linear(400, 1)
 )
-
-model = model.double()
-model
 #+end_src
 
 #+RESULTS:
 
 Now we feed in the weights from a previously trained model:
 
-#+begin_src python :session py
+#+begin_src python :session py :exports both
 model.load_state_dict(torch.load("./FTR_model_july_27_4000_inputs.pt"))
 #+end_src
 
@@ -113,104 +111,13 @@ model.load_state_dict(torch.load("./FTR_model_july_27_4000_inputs.pt"))
 : <All keys matched successfully>
 
 
-#+begin_src python :session py
-test_data = data
-test_inputs = test_data.drop(["option_value"], axis=1)
-test_inputs = torch.from_numpy(test_inputs.values)
+Here are predictions vs actual option values.
 
-test_predictions = model(test_inputs).reshape(-1)
-test_preds = test_predictions.detach().numpy()
-
-test_actual = test_data["option_value"].values
-
-pyplot.scatter(test_preds, test_actual)
-plt.show()
-
-test_output = pd.DataFrame([test_preds, test_actual]).transpose()
-test_output.columns = ["predictions", "actual"]
-test_output
-
-# Test RMSE
-
-np.sqrt(np.mean((test_output["predictions"] - test_output["actual"])**2))
-
-#+end_src
-
-#+RESULTS:
-
-#+begin_src python :session py
-#### Captum stuff from here: https://captum.ai/tutorials/House_Prices_Regression_Interpret
-
-ig = IntegratedGradients(model)
-ig_nt = NoiseTunnel(ig)
-dl = DeepLift(model)
-gs = GradientShap(model)
-fa = FeatureAblation(model)
-
-ig_attr_test = ig.attribute(test_inputs, n_steps=50)
-ig_nt_attr_test = ig_nt.attribute(test_inputs)
-dl_attr_test = dl.attribute(test_inputs)
-gs_attr_test = gs.attribute(test_inputs, inputs)
-fa_attr_test = fa.attribute(test_inputs)
-
-
-# prepare attributions for visualization
-feature_names = data.columns.values
-x_axis_data = np.arange(test_inputs.shape[1])
-x_axis_data_labels = list(map(lambda idx: feature_names[idx], x_axis_data))
-
-ig_attr_test_sum = ig_attr_test.detach().numpy().sum(0)
-ig_attr_test_norm_sum = ig_attr_test_sum / np.linalg.norm(ig_attr_test_sum, ord=1)
-
-ig_nt_attr_test_sum = ig_nt_attr_test.detach().numpy().sum(0)
-ig_nt_attr_test_norm_sum = ig_nt_attr_test_sum / np.linalg.norm(ig_nt_attr_test_sum, ord=1)
-
-dl_attr_test_sum = dl_attr_test.detach().numpy().sum(0)
-dl_attr_test_norm_sum = dl_attr_test_sum / np.linalg.norm(dl_attr_test_sum, ord=1)
-
-gs_attr_test_sum = gs_attr_test.detach().numpy().sum(0)
-gs_attr_test_norm_sum = gs_attr_test_sum / np.linalg.norm(gs_attr_test_sum, ord=1)
-
-fa_attr_test_sum = fa_attr_test.detach().numpy().sum(0)
-fa_attr_test_norm_sum = fa_attr_test_sum / np.linalg.norm(fa_attr_test_sum, ord=1)
-
-lin_weight = model[0].weight[0].detach().numpy()
-y_axis_lin_weight = lin_weight / np.linalg.norm(lin_weight, ord=1)
-
-width = 0.14
-legends = ['Int Grads', 'Int Grads w/SmoothGrad','DeepLift', 'GradientSHAP', 'Feature Ablation', 'Weights']
-
-plt.figure(figsize=(20, 10))
-
-ax = plt.subplot()
-ax.set_title('Comparing input feature importances across multiple algorithms and learned weights')
-ax.set_ylabel('Attributions')
-
-FONT_SIZE = 16
-plt.rc('font', size=FONT_SIZE)            # fontsize of the text sizes
-plt.rc('axes', titlesize=FONT_SIZE)       # fontsize of the axes title
-plt.rc('axes', labelsize=FONT_SIZE)       # fontsize of the x and y labels
-plt.rc('legend', fontsize=FONT_SIZE - 4)  # fontsize of the legend
-
-ax.bar(x_axis_data, ig_attr_test_norm_sum, width, align='center', alpha=0.8, color='#eb5e7c')
-ax.bar(x_axis_data + width, ig_nt_attr_test_norm_sum, width, align='center', alpha=0.7, color='#A90000')
-ax.bar(x_axis_data + 2 * width, dl_attr_test_norm_sum, width, align='center', alpha=0.6, color='#34b8e0')
-ax.bar(x_axis_data + 3 * width, gs_attr_test_norm_sum, width, align='center',  alpha=0.8, color='#4260f5')
-ax.bar(x_axis_data + 4 * width, fa_attr_test_norm_sum, width, align='center', alpha=1.0, color='#49ba81')
-ax.bar(x_axis_data + 5 * width, y_axis_lin_weight, width, align='center', alpha=1.0, color='grey')
-ax.autoscale_view()
-plt.tight_layout()
-
-ax.set_xticks(x_axis_data + 0.5)
-ax.set_xticklabels(x_axis_data_labels)
-
-plt.legend(legends, loc=3)
-plt.show()
-
-#+end_src
-
-#+RESULTS:
+#+Caption: Prediction Error
+[[./pred_error.png]]
 
 * Feature Attribution
 
 
+#+Caption: Feature Importance
+[[./feature_importances_4000_model.png]]
