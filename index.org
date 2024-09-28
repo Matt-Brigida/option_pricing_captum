@@ -1,0 +1,216 @@
+#+title: Feature Importance in Option Pricing with Captum
+#+author: Matt Brigida
+#+setupfile: ~/.emacs.d/org-themes/src/darksun/darksun.theme
+
+#+begin_comment
+darksun theme
+https://gitlab.com/OlMon/org-themes/-/raw/master/src/darksun/darksun.theme?ref_type=heads
+
+See list of org themes here: https://olmon.gitlab.io/org-themes/
+
+Can access all themes in .emacs/org-themes
+#+end_comment
+
+* Imports
+
+#+begin_src python :session py
+import pandas as pd
+import torch
+from torch.nn.functional import normalize
+from torch import nn
+import torch.nn.functional as F
+import torch.utils.data as data_utils
+import matplotlib.pyplot as plt
+plt.style.use('dark_background')
+import numpy as np
+from matplotlib import pyplot
+
+from captum.attr import (
+    GradientShap,
+    DeepLift,
+    DeepLiftShap,
+    IntegratedGradients,
+    LayerConductance,
+    NeuronConductance,
+    NoiseTunnel,
+    FeatureAblation,
+)
+
+device = "cuda:0"
+#+end_src
+
+#+RESULTS:
+
+
+Import data from Monte Carlo simulations:
+
+#+begin_src python :session py
+data1 = pd.read_pickle("./td1.pkl")
+data2 = pd.read_pickle("./td2.pkl")
+data3 = pd.read_pickle("./td3.pkl")
+data4 = pd.read_pickle("./td4.pkl")
+data5 = pd.read_pickle("./td5.pkl")
+data6 = pd.read_pickle("./td6.pkl")
+data7 = pd.read_pickle("./td7.pkl")
+data8 = pd.read_pickle("./td8.pkl")
+data9 = pd.read_pickle("./td9.pkl")
+data = pd.concat([data1, data2, data3, data4, data5, data6, data7, data8, data9], axis=0)
+
+data
+#+end_src
+
+#+RESULTS:
+#+begin_example
+     risk_free      vol1      vol2      corr        k1        k2   e1_start   e2_start        mu1        mu2  option_value
+0     0.000246  0.022983  0.051694 -0.275666  0.547739  0.586659  26.736341  27.136899  25.858735  34.003442      6.797245
+1     0.000058  0.029828  0.005129 -0.022649  0.720233  0.207708  33.555252  26.736119  29.976300  33.063499      5.440954
+2     0.000321  0.053443  0.020939  0.391795  0.308738  0.046923  31.241577  27.143763  33.058117  27.189379     10.974798
+3     0.000130  0.033620  0.016250 -0.003000  0.654085  0.382512  34.044292  33.778042  34.696238  25.894681      8.243242
+4     0.000210  0.057207  0.021190  0.484918  0.575378  0.668296  30.335520  28.391513  25.502045  32.433721      6.613631
+..         ...       ...       ...       ...       ...       ...        ...        ...        ...        ...           ...
+995   0.000229  0.024420  0.032109  0.168135  0.370507  0.621441  26.101353  34.332895  28.746192  32.059997      3.265470
+996   0.000084  0.006779  0.007712 -0.466865  0.243271  0.127567  30.873648  32.967921  34.333053  26.092348      2.313836
+997   0.000076  0.015852  0.042681  0.262823  0.070187  0.369278  33.930473  34.468095  27.403043  33.487219      8.132854
+998   0.000142  0.059682  0.062720 -0.049992  0.602649  0.508839  31.113604  30.427855  31.950044  32.877230     12.834470
+999   0.000111  0.047834  0.032335 -0.123484  0.526323  0.366141  25.256368  28.618138  25.730874  25.107557      7.182105
+
+[9000 rows x 11 columns]
+#+end_example
+
+* Model
+
+Here we define the model and import trained weights.
+
+
+#+begin_src python :session py
+model = nn.Sequential(
+    nn.Linear(10, 400),
+    nn.ReLU(),
+    nn.Linear(400, 400),
+    nn.ReLU(),
+    nn.Linear(400, 400),
+    nn.ReLU(),
+    nn.Linear(400, 400),
+    nn.ReLU(),
+    nn.Linear(400, 400),
+    nn.ReLU(),
+    nn.Linear(400, 1)
+)
+
+model = model.double()
+model
+#+end_src
+
+#+RESULTS:
+
+Now we feed in the weights from a previously trained model:
+
+#+begin_src python :session py
+model.load_state_dict(torch.load("./FTR_model_july_27_4000_inputs.pt"))
+#+end_src
+
+#+RESULTS:
+: <All keys matched successfully>
+
+
+#+begin_src python :session py
+test_data = data
+test_inputs = test_data.drop(["option_value"], axis=1)
+test_inputs = torch.from_numpy(test_inputs.values)
+
+test_predictions = model(test_inputs).reshape(-1)
+test_preds = test_predictions.detach().numpy()
+
+test_actual = test_data["option_value"].values
+
+pyplot.scatter(test_preds, test_actual)
+plt.show()
+
+test_output = pd.DataFrame([test_preds, test_actual]).transpose()
+test_output.columns = ["predictions", "actual"]
+test_output
+
+# Test RMSE
+
+np.sqrt(np.mean((test_output["predictions"] - test_output["actual"])**2))
+
+#+end_src
+
+#+RESULTS:
+
+#+begin_src python :session py
+#### Captum stuff from here: https://captum.ai/tutorials/House_Prices_Regression_Interpret
+
+ig = IntegratedGradients(model)
+ig_nt = NoiseTunnel(ig)
+dl = DeepLift(model)
+gs = GradientShap(model)
+fa = FeatureAblation(model)
+
+ig_attr_test = ig.attribute(test_inputs, n_steps=50)
+ig_nt_attr_test = ig_nt.attribute(test_inputs)
+dl_attr_test = dl.attribute(test_inputs)
+gs_attr_test = gs.attribute(test_inputs, inputs)
+fa_attr_test = fa.attribute(test_inputs)
+
+
+# prepare attributions for visualization
+feature_names = data.columns.values
+x_axis_data = np.arange(test_inputs.shape[1])
+x_axis_data_labels = list(map(lambda idx: feature_names[idx], x_axis_data))
+
+ig_attr_test_sum = ig_attr_test.detach().numpy().sum(0)
+ig_attr_test_norm_sum = ig_attr_test_sum / np.linalg.norm(ig_attr_test_sum, ord=1)
+
+ig_nt_attr_test_sum = ig_nt_attr_test.detach().numpy().sum(0)
+ig_nt_attr_test_norm_sum = ig_nt_attr_test_sum / np.linalg.norm(ig_nt_attr_test_sum, ord=1)
+
+dl_attr_test_sum = dl_attr_test.detach().numpy().sum(0)
+dl_attr_test_norm_sum = dl_attr_test_sum / np.linalg.norm(dl_attr_test_sum, ord=1)
+
+gs_attr_test_sum = gs_attr_test.detach().numpy().sum(0)
+gs_attr_test_norm_sum = gs_attr_test_sum / np.linalg.norm(gs_attr_test_sum, ord=1)
+
+fa_attr_test_sum = fa_attr_test.detach().numpy().sum(0)
+fa_attr_test_norm_sum = fa_attr_test_sum / np.linalg.norm(fa_attr_test_sum, ord=1)
+
+lin_weight = model[0].weight[0].detach().numpy()
+y_axis_lin_weight = lin_weight / np.linalg.norm(lin_weight, ord=1)
+
+width = 0.14
+legends = ['Int Grads', 'Int Grads w/SmoothGrad','DeepLift', 'GradientSHAP', 'Feature Ablation', 'Weights']
+
+plt.figure(figsize=(20, 10))
+
+ax = plt.subplot()
+ax.set_title('Comparing input feature importances across multiple algorithms and learned weights')
+ax.set_ylabel('Attributions')
+
+FONT_SIZE = 16
+plt.rc('font', size=FONT_SIZE)            # fontsize of the text sizes
+plt.rc('axes', titlesize=FONT_SIZE)       # fontsize of the axes title
+plt.rc('axes', labelsize=FONT_SIZE)       # fontsize of the x and y labels
+plt.rc('legend', fontsize=FONT_SIZE - 4)  # fontsize of the legend
+
+ax.bar(x_axis_data, ig_attr_test_norm_sum, width, align='center', alpha=0.8, color='#eb5e7c')
+ax.bar(x_axis_data + width, ig_nt_attr_test_norm_sum, width, align='center', alpha=0.7, color='#A90000')
+ax.bar(x_axis_data + 2 * width, dl_attr_test_norm_sum, width, align='center', alpha=0.6, color='#34b8e0')
+ax.bar(x_axis_data + 3 * width, gs_attr_test_norm_sum, width, align='center',  alpha=0.8, color='#4260f5')
+ax.bar(x_axis_data + 4 * width, fa_attr_test_norm_sum, width, align='center', alpha=1.0, color='#49ba81')
+ax.bar(x_axis_data + 5 * width, y_axis_lin_weight, width, align='center', alpha=1.0, color='grey')
+ax.autoscale_view()
+plt.tight_layout()
+
+ax.set_xticks(x_axis_data + 0.5)
+ax.set_xticklabels(x_axis_data_labels)
+
+plt.legend(legends, loc=3)
+plt.show()
+
+#+end_src
+
+#+RESULTS:
+
+* Feature Attribution
+
+
