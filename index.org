@@ -12,7 +12,14 @@ See list of org themes here: https://olmon.gitlab.io/org-themes/
 Can access all themes in .emacs/org-themes
 #+end_comment
 
-* Imports
+Deep neural networks map a set of features through layers of many neurons each to make a prediction of a target value.  Many use cases of deep neural networks only care about the accuracy of the prediction, and don't care about how the features are related to the target.  There are other sets of problems however, that are concerned about how each feature affect the target.  
+
+For example, you may be predicting default on auto leans and want to know whether debt-to-income levels affect the probability of default.  If they do, you may change your auto loan origination methods.  A logistic regression will give you a prediction of default, along with an estimate of how a given increase in debt-to-income will increase the probability of default.  A deep neural network alone will just give you a prediction.  However research in feature attribution, and the Captum library, want to change that.  
+
+In these notes we will use a different example of the need for feature attribution---option pricing.  When using options pricing models (like Black-Scholes[fn:1]) the option value is only one of the important outputs of the model.  The model also affords the /Greeks/, which are measures of how sensitive the option price is to the input values.  For example, an options /Delta/  tells how much the options price will change given some change in the underlying's price.
+
+Here we'll use deep learning to value an interesting type of option---a Financial Transmission Right option.
+
 
 #+begin_src python :session py :exports none
 import pandas as pd
@@ -121,3 +128,7 @@ Here are predictions vs actual option values.
 
 #+Caption: Feature Importance
 [[./feature_importances_4000_model.png]]
+
+* Footnotes
+
+[fn:1]Interestingly, one of the first uses of neural networks in finance was to learn the Black-Scholes model from generated prices. 
