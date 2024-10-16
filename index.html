@@ -3,7 +3,7 @@
 "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
-<!-- 2024-09-28 Sat 20:38 -->
+<!-- 2024-10-16 Wed 12:39 -->
 <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Feature Importance in Option Pricing with Captum</title>
@@ -211,6 +211,38 @@ if("undefined"==typeof jQuery)throw new Error("Bootstrap's JavaScript requires j
 <script type="text/javascript">
 $(function() {    $('.note').before("<p class='admonition-title note'>Note</p>");    $('.seealso').before("<p class='admonition-title seealso'>See also</p>");    $('.warning').before("<p class='admonition-title warning'>Warning</p>");    $('.caution').before("<p class='admonition-title caution'>Caution</p>");    $('.attention').before("<p class='admonition-title attention'>Attention</p>");    $('.tip').before("<p class='admonition-title tip'>Tip</p>");    $('.important').before("<p class='admonition-title important'>Important</p>");    $('.hint').before("<p class='admonition-title hint'>Hint</p>");    $('.error').before("<p class='admonition-title error'>Error</p>");    $('.danger').before("<p class='admonition-title danger'>Danger</p>");});$( document ).ready(function() {        $(document).on('click', "[data-toggle='wy-nav-top']", function() {      $("[data-toggle='wy-nav-shift']").toggleClass("shift");      $("[data-toggle='rst-versions']").toggleClass("shift");    });        $(document).on('click', ".wy-menu-vertical .current ul li a", function() {      $("[data-toggle='wy-nav-shift']").removeClass("shift");      $("[data-toggle='rst-versions']").toggleClass("shift");    });    $(document).on('click', "[data-toggle='rst-current-version']", function() {      $("[data-toggle='rst-versions']").toggleClass("shift-up");    });        $("table.docutils:not(.field-list)").wrap("<div class='wy-table-responsive'></div>");});$( document ).ready(function() {    $('#text-table-of-contents ul').first().addClass('nav');    $('body').scrollspy({target: '#text-table-of-contents'});            var $postamble = $('#postamble');    var $tableOfContents = $('#table-of-contents');    $tableOfContents.css({paddingBottom: $postamble.outerHeight()});        var toggleSidebar = $('<div id="toggle-sidebar"><a href="#table-of-contents"><h2>Table of Contents</h2></a></div>');    $('#content').prepend(toggleSidebar);        var closeBtn = $('<a class="close-sidebar" href="#">Close</a>');    var tocTitle = $('#table-of-contents').find('h2');    tocTitle.append(closeBtn);});window.SphinxRtdTheme = (function (jquery) {    var stickyNav = (function () {        var navBar,            win,            stickyNavCssClass = 'stickynav',            applyStickNav = function () {                if (navBar.height() <= win.height()) {                    navBar.addClass(stickyNavCssClass);                } else {                    navBar.removeClass(stickyNavCssClass);                }            },            enable = function () {                applyStickNav();                win.on('resize', applyStickNav);            },            init = function () {                navBar = jquery('nav.wy-nav-side:first');                win    = jquery(window);            };        jquery(init);        return {            enable : enable        };    }());    return {        StickyNav : stickyNav    };}($));
 </script>
+<script>
+  window.MathJax = {
+    tex: {
+      ams: {
+        multlineWidth: '85%'
+      },
+      tags: 'ams',
+      tagSide: 'right',
+      tagIndent: '.8em'
+    },
+    chtml: {
+      scale: 1.0,
+      displayAlign: 'center',
+      displayIndent: '0em'
+    },
+    svg: {
+      scale: 1.0,
+      displayAlign: 'center',
+      displayIndent: '0em'
+    },
+    output: {
+      font: 'mathjax-modern',
+      displayOverflow: 'overflow'
+    }
+  };
+</script>
+
+<script
+  id="MathJax-script"
+  async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
 </head>
 <body>
 <div id="content" class="content">
@@ -219,8 +251,8 @@ $(function() {    $('.note').before("<p class='admonition-title note'>Note</p>")
 <h2>Table of Contents</h2>
 <div id="text-table-of-contents" role="doc-toc">
 <ul>
-<li><a href="#org47521af">1. Model</a></li>
-<li><a href="#orgf249b84">2. Feature Attribution</a></li>
+<li><a href="#org1863f4f">1. Model</a></li>
+<li><a href="#org2525b51">2. Feature Attribution</a></li>
 </ul>
 </div>
 </div>
@@ -237,15 +269,29 @@ In these notes we will use a different example of the need for feature attributi
 </p>
 
 <p>
-Here we'll use deep learning to value an interesting type of option&#x2014;a Financial Transmission Right option.
+Here we'll use deep learning to value an interesting type of option&#x2014;a Financial Transmission Right option.  An FTR pays the difference between the congestion prices at two points on the electricity grid.  An FTR option pays the difference if it is positive, or $0 otherwise.  To simulate FTR option values we can simulate electricity price processes at two points on the grid.  To do so we generate two correlated processes which follow the following stochastic differential equation:
 </p>
 
+<p>
+\[dE_t = \kappa(\mu - E_t)dt + \sigma E_t dB_t\]
+</p>
+
+<p>
+where:
+</p>
+
+<ul class="org-ul">
+<li>\(E_t\) is the electricity price at a given node</li>
+<li>\(\kappa\) is the rate of mean reversion</li>
+<li>\(\mu\) is the mean electricity price at the node</li>
+<li>\(\sigma\) is the price volatility at the node</li>
+</ul>
 
 <p>
 Import data from Monte Carlo simulations:
 </p>
 
-<pre class="example" id="org40144fb">
+<pre class="example" id="org05ff7be">
      risk_free      vol1      vol2      corr        k1        k2   e1_start   e2_start        mu1        mu2  option_value
 0     0.000246  0.022983  0.051694 -0.275666  0.547739  0.586659  26.736341  27.136899  25.858735  34.003442      6.797245
 1     0.000058  0.029828  0.005129 -0.022649  0.720233  0.207708  33.555252  26.736119  29.976300  33.063499      5.440954
@@ -262,8 +308,8 @@ Import data from Monte Carlo simulations:
 [9000 rows x 11 columns]
 </pre>
 
-<div id="outline-container-org47521af" class="outline-2">
-<h2 id="org47521af"><span class="section-number-2">1.</span> Model</h2>
+<div id="outline-container-org1863f4f" class="outline-2">
+<h2 id="org1863f4f"><span class="section-number-2">1.</span> Model</h2>
 <div class="outline-text-2" id="text-1">
 <p>
 Here we define the model and import trained weights.
@@ -307,7 +353,7 @@ Here are predictions vs actual option values.
 </p>
 
 
-<div id="org6b1906d" class="figure">
+<div id="orgee454f0" class="figure">
 <p><img src="./pred_error.png" alt="pred_error.png" />
 </p>
 <p><span class="figure-number">Figure 1: </span>Prediction Error</p>
@@ -315,11 +361,11 @@ Here are predictions vs actual option values.
 </div>
 </div>
 
-<div id="outline-container-orgf249b84" class="outline-2">
-<h2 id="orgf249b84"><span class="section-number-2">2.</span> Feature Attribution</h2>
+<div id="outline-container-org2525b51" class="outline-2">
+<h2 id="org2525b51"><span class="section-number-2">2.</span> Feature Attribution</h2>
 <div class="outline-text-2" id="text-2">
 
-<div id="orgb16efb4" class="figure">
+<div id="orgea09278" class="figure">
 <p><img src="./feature_importances_4000_model.png" alt="feature_importances_4000_model.png" />
 </p>
 <p><span class="figure-number">Figure 2: </span>Feature Importance</p>
@@ -339,7 +385,7 @@ Interestingly, one of the first uses of neural networks in finance was to learn 
 </div></div>
 <div id="postamble" class="status">
 <p class="author">Author: Matt Brigida</p>
-<p class="date">Created: 2024-09-28 Sat 20:38</p>
+<p class="date">Created: 2024-10-16 Wed 12:39</p>
 <p class="validation"><a href="https://validator.w3.org/check?uri=referer">Validate</a></p>
 </div>
 </body>

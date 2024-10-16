@@ -18,8 +18,22 @@ For example, you may be predicting default on auto leans and want to know whethe
 
 In these notes we will use a different example of the need for feature attribution---option pricing.  When using options pricing models (like Black-Scholes[fn:1]) the option value is only one of the important outputs of the model.  The model also affords the /Greeks/, which are measures of how sensitive the option price is to the input values.  For example, an options /Delta/  tells how much the options price will change given some change in the underlying's price.
 
-Here we'll use deep learning to value an interesting type of option---a Financial Transmission Right option.
+Here we'll use deep learning to value an interesting type of option---a Financial Transmission Right option.  An FTR pays the difference between the congestion prices at two points on the electricity grid.  An FTR option pays the difference if it is positive, or $0 otherwise.  To simulate FTR option values we can simulate electricity price processes at two points on the grid.  To do so we generate two correlated processes which follow the following stochastic differential equation:
 
+#+begin_export latex
+%\begin{equation}
+$dE_t = (\mu - E_t)dt + \sigma B_t$
+%\end{equation}
+#+end_export
+
+$$dE_t = \kappa(\mu - E_t)dt + \sigma E_t dB_t$$
+
+where:
+
+- $E_t$ is the electricity price at a given node
+- $\kappa$ is the rate of mean reversion
+- $\mu$ is the mean electricity price at the node
+- $\sigma$ is the price volatility at the node
 
 #+begin_src python :session py :exports none
 import pandas as pd
